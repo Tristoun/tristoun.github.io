@@ -1,0 +1,32 @@
+{
+  "name": "race_game",
+  "version": "1.0.0",
+  "description": "Racing game",
+  "main": "index.js",
+  "scripts": {
+    "start": "npx webpack --watch",
+    "css": "npx tailwindcss -i input.css -o public/dist/output.css -m -w"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@babylonjs/core": "^8.22.2",
+    "@babylonjs/gui": "^8.29.0",
+    "@babylonjs/havok": "^1.3.10",
+    "@babylonjs/loaders": "^8.22.2",
+    "@babylonjs/materials": "^8.22.2",
+    "@tailwindcss/cli": "^4.1.12",
+    "express": "^5.1.0",
+    "sqlite3": "^5.1.7",
+    "tailwindcss": "^4.1.12"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.0",
+    "copy-webpack-plugin": "^13.0.1",
+    "html-webpack-plugin": "^5.6.3",
+    "webpack": "^5.101.0",
+    "webpack-cli": "^6.0.1",
+    "webpack-dev-server": "^5.2.2"
+  }
+}
