@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "start": "npx webpack --watch",
-    "css": "npx tailwindcss -i input.css -o public/dist/output.css -m -w"
+    "css": "npx tailwindcss -i input.css -o docs/dist/output.css -m -w",
+    "predeploy": "npm run start",
+    "deploy": "gh-pages -d docs"
   },
   "keywords": [],
   "author": "",
@@ -24,6 +26,7 @@
   "devDependencies": {
     "concurrently": "^9.2.0",
     "copy-webpack-plugin": "^13.0.1",
+    "gh-pages": "^6.3.0",
     "html-webpack-plugin": "^5.6.3",
     "webpack": "^5.101.0",
     "webpack-cli": "^6.0.1",

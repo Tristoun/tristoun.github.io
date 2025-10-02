@@ -3,10 +3,10 @@ const HtmlWebpackPlugin = require("html-webpack-plugin");
 const CopyPlugin = require("copy-webpack-plugin");
 
 module.exports = {
-  entry: "./public/src/app.js",
+  entry: "./docs/src/app.js",
   output: {
     filename: "game.bundle.js",
-    path: path.resolve(__dirname, "public/dist"),
+    path: path.resolve(__dirname, "docs/dist"),
     publicPath: "",
     clean: true,
   },
@@ -28,13 +28,13 @@ module.exports = {
   },
   plugins: [
     new HtmlWebpackPlugin({
-      template: "public/car.php",
+      template: "docs/car.php",
       filename: "car.php",
       inject: "body",
     }),
     new CopyPlugin({
       patterns: [
-        { from: "./public/models", to: "models" }
+        { from: "./docs/models", to: "models" }
       ],
     }),
   ],
