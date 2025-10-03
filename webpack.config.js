@@ -28,8 +28,8 @@ module.exports = {
   },
   plugins: [
     new HtmlWebpackPlugin({
-      template: "docs/car.php",
-      filename: "car.php",
+      template: "docs/car_index.php",
+      filename: "car_index.php",
       inject: "body",
     }),
     new CopyPlugin({

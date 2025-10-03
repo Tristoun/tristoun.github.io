@@ -40,6 +40,33 @@ export function controlCar(scene, dsm, car, dataKey, keysPressed, velocity, time
 
   switch (dataKey) {
     case "z": { // move forward
+      if(!keysPressed.has("ArrowUp")) {
+        straight = true;
+        if(time_decc > 0) {
+          time_decc = 0;
+        }
+        // get rotation matrix from car's rotation
+        const rotationMatrix = Matrix.RotationYawPitchRoll(car.rotation.y, car.rotation.x, car.rotation.z);
+        // const localForward = new Vector3(1, 0, 0);
+        force = 0.15;
+        velocity = determineSpeed(velocity, time_acc, force);
+        
+        if(velocity > maxVelocity) {
+          velocity = maxVelocity;
+        }
+        else {
+          time_acc += 0.005;
+        }
+
+        movement = new Vector3(velocity, 0,0);
+        // const forward = Vector3.TransformCoordinates(localForward, rotationMatrix);
+        const forward = Vector3.TransformCoordinates(movement, rotationMatrix);
+        car.position.addInPlace(forward.scale(speed));
+      }
+      break;
+    }
+
+    case "ArrowUp" : {
       straight = true;
       if(time_decc > 0) {
         time_decc = 0;
@@ -65,7 +92,7 @@ export function controlCar(scene, dsm, car, dataKey, keysPressed, velocity, time
     }
 
     case "s": {  // move backward
-      if(!keysPressed.has("z")) {
+      if(!keysPressed.has("z") && !keysPressed.has("ArrowUp")) {
         const rotationMatrix = Matrix.RotationYawPitchRoll(car.rotation.y, car.rotation.x, car.rotation.z);
         // const localBackward = new Vector3(-1, 0, 0);
         // const backward = Vector3.TransformCoordinates(localBackward, rotationMatrix);
@@ -98,6 +125,40 @@ export function controlCar(scene, dsm, car, dataKey, keysPressed, velocity, time
       break;
     }
 
+    case "ArrowDown" : {
+      if(!keysPressed.has("z") && !keysPressed.has("ArrowUp")) {
+        const rotationMatrix = Matrix.RotationYawPitchRoll(car.rotation.y, car.rotation.x, car.rotation.z);
+        // const localBackward = new Vector3(-1, 0, 0);
+        // const backward = Vector3.TransformCoordinates(localBackward, rotationMatrix);
+        if(time_acc > 0 ){
+          time_acc = 0.0;
+        }
+        time_decc += 0.01;
+        if(velocity <= 0) {
+          velocity = 0.0
+        }
+        else {
+          force = -0.2;
+
+        }
+        velocity = determineSpeed(velocity, time_decc, force)
+
+      
+        if (velocity > maxVelocity) {
+          velocity = maxVelocity;
+        }
+        else if (velocity < -maxVelocity+0.5) {
+          velocity = -maxVelocity+0.5
+        }
+        movement = new Vector3(velocity, 0,0);
+        const backward = Vector3.TransformCoordinates(movement, rotationMatrix);
+
+        car.position.addInPlace(backward.scale(speed));
+        
+      }
+      break;
+    }
+
     case "q": // turn left
       if(Array.from(keysPressed)[0] != "d") {
         car.rotation.y -= turnSpeed;
@@ -115,9 +176,30 @@ export function controlCar(scene, dsm, car, dataKey, keysPressed, velocity, time
       else {
         bothDirection = true;
       }
-      break;     
+      break;    
+      
+      
+    case "ArrowRight" :
+      if(Array.from(keysPressed)[0] != "q") {
+        car.rotation.y += turnSpeed;
+        bothDirection = false;
+      }
+      else {
+        bothDirection = true;
+      }
+      break;   
+    case "ArrowLeft" :
+      if(Array.from(keysPressed)[0] != "d") {
+        car.rotation.y -= turnSpeed;
+        bothDirection = false;
+      }
+      else {
+        bothDirection = true;
+      }
+      break;
+
   }
-  if(!keysPressed.has("z") && !keysPressed.has("s") && bothDirection == false) {
+  if(!keysPressed.has("z") && !keysPressed.has("s") && bothDirection == false && !keysPressed.has("ArrowUp") && !keysPressed.has("ArrowDown") ) {
     const rotationMatrix = Matrix.RotationYawPitchRoll(car.rotation.y, car.rotation.x, car.rotation.z);
     // const localBackward = new Vector3(-1, 0, 0);
     // const backward = Vector3.TransformCoordinates(localBackward, rotationMatrix);

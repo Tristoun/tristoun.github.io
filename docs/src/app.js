@@ -316,6 +316,7 @@ async function run_game() {
     let result;
 
     const keyUnlocked = ["z", "q", "d", "s"];
+    const keyArrow = ["ArrowUp", "ArrowLeft", "ArrowRight","ArrowDown"]
 
 
     const mapImage = new Image();
@@ -347,7 +348,7 @@ async function run_game() {
     engine.runRenderLoop(() => {
         
         // console.log(keysPressed.size, car.position);
-        // console.log(keysPressed, stateGame);
+        console.log(keysPressed, stateGame);
         // console.log(car.position.x , car.position.z, Vector3.TransformCoordinates(car.position, car.getWorldMatrix()));
         // console.log(getWorldPosition(car.position));
         // console.log(car.position.x, car.position.z);
@@ -371,7 +372,7 @@ async function run_game() {
         else {
             
             keysPressed.forEach((key) => {
-                if(keyUnlocked.includes(key) && stateGame == 1) {
+                if((keyUnlocked.includes(key) || keyArrow.includes(key)) && stateGame == 1) {
                     result = controlCar(scene, deviceSourceManager, car, key, keysPressed, velocity, time_acc, time_decc, red);
                     velocity = result[0];
                     time_acc = result[1];
