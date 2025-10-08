@@ -46,11 +46,11 @@ function checkCheckpointsArea(car, checkpoints, width = 2) {
         // Check if car is inside rectangle area
         if ((along >= 0 && along <= segLen && Math.abs(across) <= width / 2) && cp[3] != "start") {
             cp[2] = true; // mark as passed
-            console.log("Checkpoint passed!", cp, nbcheck);
+            // console.log("Checkpoint passed!", cp, nbcheck);
         }
         if ((along >= 0 && along <= segLen && Math.abs(across) <= width / 2) && (cp[3] == "start" && nbcheck == 9)) { //We can check the last because last in the list
             cp[3] = true;
-            console.log("RUN FINISH");
+            // console.log("RUN FINISH");
         }
     });
     return checkpoints;
@@ -315,6 +315,10 @@ async function run_game() {
     let time_decc = 0.0;
     let result;
 
+    const targetFPS = 80; 
+    const frameDuration = 1000 / targetFPS; // milliseconds per frame
+    let lastFrameTime = 0;
+
     const keyUnlocked = ["z", "q", "d", "s"];
     const keyArrow = ["ArrowUp", "ArrowLeft", "ArrowRight","ArrowDown"]
 
@@ -348,11 +352,18 @@ async function run_game() {
     engine.runRenderLoop(() => {
         
         // console.log(keysPressed.size, car.position);
-        console.log(keysPressed, stateGame);
+        // console.log(keysPressed, stateGame);
         // console.log(car.position.x , car.position.z, Vector3.TransformCoordinates(car.position, car.getWorldMatrix()));
         // console.log(getWorldPosition(car.position));
         // console.log(car.position.x, car.position.z);
         // console.log(testCheckpoint.position, testCheckpoint.rotation);
+        // console.log(engine.getFps());
+        const now = performance.now();
+        const delta = now - lastFrameTime;
+
+        if (delta < frameDuration) return; // skip this frame if too soon
+
+        lastFrameTime = now - (delta % frameDuration);
         if (!pixelData) return; // wait until it's loaded
 
         const imagePosCar = getWorldPosition(car.position);
@@ -362,6 +373,7 @@ async function run_game() {
         const width = 2048; // image width
         const index = (y * width + x) * 4; // 4 bytes per pixel
         const red = pixelData[index];
+        
 
         if(keysPressed.size == 0) {
             result = controlCar(scene, deviceSourceManager, car, "", keysPressed, velocity, time_acc, time_decc, red);
