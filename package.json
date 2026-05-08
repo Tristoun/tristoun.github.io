@@ -18,8 +18,10 @@
     "@babylonjs/havok": "^1.3.10",
     "@babylonjs/loaders": "^8.22.2",
     "@babylonjs/materials": "^8.22.2",
+    "@flow-js/garmin-connect": "^1.6.7",
     "@tailwindcss/cli": "^4.1.12",
     "express": "^5.1.0",
+    "konva": "^10.0.12",
     "sqlite3": "^5.1.7",
     "tailwindcss": "^4.1.12"
   },
