@@ -3,7 +3,7 @@ import {
 } from '@babylonjs/core';
 import { TerrainMaterial } from '@babylonjs/materials';
 import { createTexture } from './texture';
-import { DEPARTURE, GROUND_SIZE, PIT_LANE, WORLD_SCALE } from './track.js';
+import { DEPARTURE, GROUND_SIZE, PIT_LANE, WORLD_SCALE, getPitStall } from './track.js';
 
 import mixMapUrl from '../models/mixmapcircuit.png';
 import roadUrl from '../models/road2.png';
@@ -198,15 +198,30 @@ export function createPitComplex(scene) {
     rootParts.push(board);
   });
 
-  // Box pad
+  // Dual box pads (P1 further/left, P2 shorter/right) + faint center mark
+  const stallPads = [
+    { id: 1, stall: getPitStall(1, 2) },
+    { id: 2, stall: getPitStall(2, 2) },
+  ];
+  stallPads.forEach(({ id, stall }) => {
+    const pad = MeshBuilder.CreateBox('pitBoxP' + id, {
+      width: 4.2,
+      height: 0.1,
+      depth: 5.4,
+    }, scene);
+    pad.position = new Vector3(stall.x, 0.06, stall.z);
+    pad.rotation.y = yaw;
+    pad.material = accentMat;
+    rootParts.push(pad);
+  });
   const boxPad = MeshBuilder.CreateBox('pitBox', {
-    width: laneHalfWidth * 1.45,
-    height: 0.09,
-    depth: 6.2,
+    width: laneHalfWidth * 1.2,
+    height: 0.05,
+    depth: 10.5,
   }, scene);
-  boxPad.position = new Vector3(box.x, 0.055, box.z);
+  boxPad.position = new Vector3(box.x, 0.04, box.z);
   boxPad.rotation.y = yaw;
-  boxPad.material = accentMat;
+  boxPad.material = asphalt;
   rootParts.push(boxPad);
 
   // Garages further off the pit side (away from racing line)

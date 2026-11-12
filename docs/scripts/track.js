@@ -143,6 +143,42 @@ PIT_LANE.p1 = PIT_LANE.entry;
 PIT_LANE.p2 = PIT_LANE.exitCorner;
 PIT_LANE.halfWidth = PIT_LANE.laneHalfWidth;
 
+/** Dual-box offsets so both cars can stop without overlapping. */
+const STALL_ALONG = 3.6;   // further / less far along the lane
+const STALL_LATERAL = 2.7; // left / right of centerline (+side = left when facing laneDir)
+
+/**
+ * Box stall for a player. In 2P: P1 further + left, P2 shorter + right.
+ * Solo keeps the center box.
+ */
+export function getPitStall(playerId, playerCount = 2) {
+  if (playerCount < 2) return PIT_LANE.box.clone();
+  const along = playerId === 2 ? -STALL_ALONG : STALL_ALONG;
+  const across = playerId === 2 ? -STALL_LATERAL : STALL_LATERAL;
+  return PIT_LANE.box
+    .add(PIT_LANE.laneDir.scale(along))
+    .add(PIT_LANE.side.scale(across));
+}
+
+/** Enter/exit waypoint paths ending/starting on that player's stall. */
+export function getPitPathsForPlayer(playerId, playerCount = 2) {
+  const stall = getPitStall(playerId, playerCount);
+  const { merge, entry, exitCorner, rejoin, accessDir, laneDir, exitDir, forward } = PIT_LANE;
+  return {
+    stall,
+    enterPath: [
+      { pos: merge.clone(), yaw: yawFromDir(accessDir), turn: false },
+      { pos: entry.clone(), yaw: yawFromDir(accessDir), turn: true, faceYaw: yawFromDir(laneDir) },
+      { pos: stall.clone(), yaw: yawFromDir(laneDir), turn: false },
+    ],
+    exitPath: [
+      { pos: stall.clone(), yaw: yawFromDir(laneDir), turn: false },
+      { pos: exitCorner.clone(), yaw: yawFromDir(laneDir), turn: true, faceYaw: yawFromDir(exitDir) },
+      { pos: rejoin.clone(), yaw: yawFromDir(exitDir), turn: true, faceYaw: yawFromDir(forward) },
+    ],
+  };
+}
+
 function pointInOrientedBand(pos, a, b, halfWidth) {
   const seg = b.subtract(a);
   const segLen = seg.length();

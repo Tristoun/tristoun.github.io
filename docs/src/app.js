@@ -16,8 +16,8 @@ import { createF1Car, TEAM_COLORS } from '../scripts/f1car.js';
 import {
   CHECKPOINT_LAYOUT, CHECKPOINT_RADIUS, CHECKPOINT_WIDTH, TOTAL_CHECKPOINTS,
   START_ROT, getStartPositions, isInsidePitLane, isInsidePitEntry,
-  constrainToPitCorridor, separatePitCars,
-  PIT_LANE, GROUND_SIZE
+  separatePitCars,
+  PIT_LANE, GROUND_SIZE, getPitPathsForPlayer
 } from '../scripts/track.js';
 import {
   DEFAULT_COMPOUND, getCompound, computeTireWear, getTirePerformance,
@@ -40,9 +40,6 @@ const ui = {
   lapGlobal: document.getElementById('lap-global'),
   statusPill: document.getElementById('status-pill'),
   pitPill: document.getElementById('pit-pill'),
-  pitMenu: document.getElementById('pit-menu'),
-  pitProgress: document.getElementById('pit-progress'),
-  pitStatus: document.getElementById('pit-status'),
   finishTime: document.getElementById('finish-time'),
   finishBest: document.getElementById('finish-best'),
   finishTitle: document.getElementById('finish-title'),
@@ -443,20 +440,31 @@ async function run_game() {
     if (tireEl) tireEl.style.background = `linear-gradient(90deg, ${compound.css}, #7dffd8)`;
   }
 
-  function hidePitMenu() {
-    ui.pitMenu?.classList.remove('visible', 'changing', 'waiting');
-    if (ui.pitProgress) ui.pitProgress.style.width = '0%';
+  function pitMenuEl(playerId) {
+    return document.getElementById('pit-menu-p' + playerId);
+  }
+
+  function hidePitMenu(playerId) {
+    if (playerId == null) {
+      hidePitMenu(1);
+      hidePitMenu(2);
+      document.body.classList.remove('dual-pit');
+      return;
+    }
+    const el = pitMenuEl(playerId);
+    el?.classList.remove('visible', 'changing', 'waiting');
+    const progress = el?.querySelector('.pit-progress');
+    if (progress) progress.style.width = '0%';
   }
 
   function showPitMenu(player, mode = 'servicing') {
-    if (!ui.pitMenu) return;
-    ui.pitMenu.classList.add('visible');
-    ui.pitMenu.classList.toggle('changing', mode === 'waiting');
-    ui.pitMenu.classList.toggle('waiting', mode === 'waiting');
-    ui.pitMenu.dataset.player = String(player.id);
+    const el = pitMenuEl(player.id);
+    if (!el) return;
+    el.classList.add('visible');
+    el.classList.toggle('changing', mode === 'waiting');
+    el.classList.toggle('waiting', mode === 'waiting');
 
-    // Highlight key hints on buttons
-    ui.pitMenu.querySelectorAll('.pit-choice').forEach((btn) => {
+    el.querySelectorAll('.pit-choice').forEach((btn) => {
       const keyHint = btn.querySelector('.key-hint');
       if (!keyHint) return;
       if (player.id === 1) {
@@ -464,20 +472,23 @@ async function run_game() {
       } else {
         keyHint.textContent = { soft: 'Touche 8', medium: 'Touche 9', hard: 'Touche 0' }[btn.dataset.compound] || '';
       }
+      btn.classList.toggle('selected', !!player.pitTargetCompound && btn.dataset.compound === player.pitTargetCompound);
     });
 
+    const status = el.querySelector('.pit-status');
+    const progress = el.querySelector('.pit-progress');
     if (mode === 'waiting' && player.pitTargetCompound) {
       const c = getCompound(player.pitTargetCompound);
       const pct = Math.min(100, (player.pitProgress / PIT_LANE.serviceTimeMs) * 100);
-      if (ui.pitProgress) ui.pitProgress.style.width = pct + '%';
-      if (ui.pitStatus) {
-        ui.pitStatus.textContent = `P${player.id} · montage ${c.label}… ${Math.ceil((PIT_LANE.serviceTimeMs - player.pitProgress) / 1000)}s`;
+      if (progress) progress.style.width = pct + '%';
+      if (status) {
+        status.textContent = `Montage ${c.label}… ${Math.ceil((PIT_LANE.serviceTimeMs - player.pitProgress) / 1000)}s`;
       }
-    } else if (ui.pitStatus) {
-      ui.pitStatus.textContent = mode === 'entering'
+    } else if (status) {
+      status.textContent = mode === 'entering'
         ? (player.id === 1
-          ? 'En approche box — choisis déjà : 1 Soft · 2 Medium · 3 Hard'
-          : 'En approche box — choisis déjà : 8 Soft · 9 Medium · 0 Hard')
+          ? 'Approche box — 1 Soft · 2 Medium · 3 Hard'
+          : 'Approche box — 8 Soft · 9 Medium · 0 Hard')
         : (player.id === 1
           ? 'À l’arrêt — valide avec 1 / 2 / 3'
           : 'À l’arrêt — valide avec 8 / 9 / 0');
@@ -507,7 +518,7 @@ async function run_game() {
     player.pitTurnDone = false;
     applyWheelCompoundColor(player.wheels, compound);
     updateCompoundHud(player);
-    hidePitMenu();
+    hidePitMenu(player.id);
     flashScreen();
   }
 
@@ -607,11 +618,13 @@ async function run_game() {
     if (!player || !compoundId) return;
     if (player.pitState === 'entering') {
       player.pitTargetCompound = compoundId;
-      ui.pitMenu?.querySelectorAll('.pit-choice').forEach((b) => {
+      const el = pitMenuEl(player.id);
+      el?.querySelectorAll('.pit-choice').forEach((b) => {
         b.classList.toggle('selected', b.dataset.compound === compoundId);
       });
-      if (ui.pitStatus) {
-        ui.pitStatus.textContent = `P${player.id} · ${getCompound(compoundId).label} sélectionné — montage à la box`;
+      const status = el?.querySelector('.pit-status');
+      if (status) {
+        status.textContent = `${getCompound(compoundId).label} sélectionné — montage à la box`;
       }
       return;
     }
@@ -620,13 +633,14 @@ async function run_game() {
     }
   }
 
-  // Pit menu click choices
-  ui.pitMenu?.querySelectorAll('.pit-choice').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      if (!sceneBundle || stateGame !== 'racing') return;
-      const pid = Number(ui.pitMenu.dataset.player || 1);
-      const player = sceneBundle.players.find((p) => p.id === pid);
-      selectPitCompound(player, btn.dataset.compound);
+  // Pit menu click choices (one panel per player)
+  [1, 2].forEach((pid) => {
+    pitMenuEl(pid)?.querySelectorAll('.pit-choice').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (!sceneBundle || stateGame !== 'racing') return;
+        const player = sceneBundle.players.find((p) => p.id === pid);
+        selectPitCompound(player, btn.dataset.compound);
+      });
     });
   });
 
@@ -742,7 +756,7 @@ async function run_game() {
     }
 
     let anyoneOffroad = false;
-    let pitMenuPlayer = null;
+    const activePitMenus = new Set();
     let maxLapShown = 1;
 
     // Slipstream before movement so boost applies this frame
@@ -811,9 +825,12 @@ async function run_game() {
 
         let locked = false;
 
+        const pitPaths = getPitPathsForPlayer(player.id, settings.players);
+        const pitStall = pitPaths.stall;
+
         if (player.pitState === 'entering') {
           locked = true;
-          pitMenuPlayer = player;
+          activePitMenus.add(player.id);
           showPitMenu(player, 'entering');
           const earlyChoice = readPitCompoundChoice(player);
           if (earlyChoice) selectPitCompound(player, earlyChoice);
@@ -822,7 +839,7 @@ async function run_game() {
           try {
             move = followPitPath(
               player.car,
-              PIT_LANE.enterPath,
+              pitPaths.enterPath,
               {
                 pathIndex: player.pitPathIndex,
                 turning: player.pitTurning,
@@ -843,8 +860,8 @@ async function run_game() {
           player.velocity = move.velocity;
 
           if (move.done) {
-            player.car.position.x = PIT_LANE.box.x;
-            player.car.position.z = PIT_LANE.box.z;
+            player.car.position.x = pitStall.x;
+            player.car.position.z = pitStall.z;
             player.velocity = 0;
             player.pitTurning = false;
             player.pitTurnDone = false;
@@ -857,15 +874,19 @@ async function run_game() {
         } else if (player.pitState === 'servicing') {
           locked = true;
           player.velocity = 0;
-          pitMenuPlayer = player;
+          player.car.position.x = pitStall.x;
+          player.car.position.z = pitStall.z;
+          activePitMenus.add(player.id);
           showPitMenu(player, 'servicing');
           const choice = readPitCompoundChoice(player);
           if (choice) startTireWait(player, choice);
         } else if (player.pitState === 'waiting') {
           locked = true;
           player.velocity = 0;
+          player.car.position.x = pitStall.x;
+          player.car.position.z = pitStall.z;
           player.pitProgress += frameDuration;
-          pitMenuPlayer = player;
+          activePitMenus.add(player.id);
           showPitMenu(player, 'waiting');
           if (player.pitProgress >= PIT_LANE.serviceTimeMs) {
             finishPitService(player);
@@ -876,7 +897,7 @@ async function run_game() {
           try {
             move = followPitPath(
               player.car,
-              PIT_LANE.exitPath,
+              pitPaths.exitPath,
               {
                 pathIndex: player.pitPathIndex,
                 turning: player.pitTurning,
@@ -906,11 +927,6 @@ async function run_game() {
             player.pitTurning = false;
             player.pitTurnDone = false;
           }
-        }
-
-        // Corridor only on the long straight (path already stays on centerline)
-        if (player.pitState === 'servicing' || player.pitState === 'waiting') {
-          constrainToPitCorridor(player.car);
         }
 
         if (!locked) {
@@ -980,7 +996,10 @@ async function run_game() {
     }
     separatePitCars(players);
 
-    if (!pitMenuPlayer) hidePitMenu();
+    [1, 2].forEach((id) => {
+      if (!activePitMenus.has(id)) hidePitMenu(id);
+    });
+    document.body.classList.toggle('dual-pit', activePitMenus.has(1) && activePitMenus.has(2));
 
     const pitLabels = {
       entering: 'Procédure stands…',
@@ -989,9 +1008,12 @@ async function run_game() {
       exiting: 'Sortie de box…',
     };
     const anyPit = players.find((p) => p.pitState !== 'none');
-    ui.statusPill.classList.toggle('visible', anyoneOffroad && stateGame === 'racing');
-    ui.pitPill.classList.toggle('visible', !!anyPit && stateGame === 'racing');
-    ui.pitPill.textContent = anyPit ? (pitLabels[anyPit.pitState] || 'Stands') : '';
+    const pitCount = players.filter((p) => p.pitState !== 'none').length;
+    ui.statusPill.classList.toggle('visible', anyoneOffroad && stateGame === 'racing' && settings.players === 1);
+    ui.pitPill.classList.toggle('visible', !!anyPit && stateGame === 'racing' && settings.players === 1);
+    ui.pitPill.textContent = anyPit
+      ? (pitCount > 1 ? 'Double arrêt aux stands' : (pitLabels[anyPit.pitState] || 'Stands'))
+      : '';
     ui.timer.textContent = stopwatch.getTimeString();
     ui.lapGlobal.textContent = `Tour ${Math.min(maxLapShown, settings.laps)} / ${settings.laps}`;
 
@@ -1025,7 +1047,9 @@ async function run_game() {
     scene.render();
   });
 
-  window.addEventListener('resize', () => engine.resize());
+  const onViewportResize = () => engine.resize();
+  window.addEventListener('resize', onViewportResize);
+  window.visualViewport?.addEventListener('resize', onViewportResize);
 }
 
 run_game().catch((err) => {

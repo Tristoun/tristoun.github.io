@@ -964,15 +964,30 @@ function createPitComplex(scene) {
     rootParts.push(board);
   });
 
-  // Box pad
+  // Dual box pads (P1 further/left, P2 shorter/right) + faint center mark
+  const stallPads = [
+    { id: 1, stall: (0,_track_js__WEBPACK_IMPORTED_MODULE_3__.getPitStall)(1, 2) },
+    { id: 2, stall: (0,_track_js__WEBPACK_IMPORTED_MODULE_3__.getPitStall)(2, 2) },
+  ];
+  stallPads.forEach(({ id, stall }) => {
+    const pad = _babylonjs_core__WEBPACK_IMPORTED_MODULE_0__.MeshBuilder.CreateBox('pitBoxP' + id, {
+      width: 4.2,
+      height: 0.1,
+      depth: 5.4,
+    }, scene);
+    pad.position = new _babylonjs_core__WEBPACK_IMPORTED_MODULE_0__.Vector3(stall.x, 0.06, stall.z);
+    pad.rotation.y = yaw;
+    pad.material = accentMat;
+    rootParts.push(pad);
+  });
   const boxPad = _babylonjs_core__WEBPACK_IMPORTED_MODULE_0__.MeshBuilder.CreateBox('pitBox', {
-    width: laneHalfWidth * 1.45,
-    height: 0.09,
-    depth: 6.2,
+    width: laneHalfWidth * 1.2,
+    height: 0.05,
+    depth: 10.5,
   }, scene);
-  boxPad.position = new _babylonjs_core__WEBPACK_IMPORTED_MODULE_0__.Vector3(box.x, 0.055, box.z);
+  boxPad.position = new _babylonjs_core__WEBPACK_IMPORTED_MODULE_0__.Vector3(box.x, 0.04, box.z);
   boxPad.rotation.y = yaw;
-  boxPad.material = accentMat;
+  boxPad.material = asphalt;
   rootParts.push(boxPad);
 
   // Garages further off the pit side (away from racing line)
@@ -1206,7 +1221,9 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   constrainToPitCorridor: () => (/* binding */ constrainToPitCorridor),
 /* harmony export */   getForwardDir: () => (/* binding */ getForwardDir),
 /* harmony export */   getInfieldDir: () => (/* binding */ getInfieldDir),
+/* harmony export */   getPitPathsForPlayer: () => (/* binding */ getPitPathsForPlayer),
 /* harmony export */   getPitSideDir: () => (/* binding */ getPitSideDir),
+/* harmony export */   getPitStall: () => (/* binding */ getPitStall),
 /* harmony export */   getRightDir: () => (/* binding */ getRightDir),
 /* harmony export */   getStartPositions: () => (/* binding */ getStartPositions),
 /* harmony export */   isInsidePitEntry: () => (/* binding */ isInsidePitEntry),
@@ -1361,6 +1378,42 @@ const PIT_LANE = buildPitGeometry();
 PIT_LANE.p1 = PIT_LANE.entry;
 PIT_LANE.p2 = PIT_LANE.exitCorner;
 PIT_LANE.halfWidth = PIT_LANE.laneHalfWidth;
+
+/** Dual-box offsets so both cars can stop without overlapping. */
+const STALL_ALONG = 3.6;   // further / less far along the lane
+const STALL_LATERAL = 2.7; // left / right of centerline (+side = left when facing laneDir)
+
+/**
+ * Box stall for a player. In 2P: P1 further + left, P2 shorter + right.
+ * Solo keeps the center box.
+ */
+function getPitStall(playerId, playerCount = 2) {
+  if (playerCount < 2) return PIT_LANE.box.clone();
+  const along = playerId === 2 ? -STALL_ALONG : STALL_ALONG;
+  const across = playerId === 2 ? -STALL_LATERAL : STALL_LATERAL;
+  return PIT_LANE.box
+    .add(PIT_LANE.laneDir.scale(along))
+    .add(PIT_LANE.side.scale(across));
+}
+
+/** Enter/exit waypoint paths ending/starting on that player's stall. */
+function getPitPathsForPlayer(playerId, playerCount = 2) {
+  const stall = getPitStall(playerId, playerCount);
+  const { merge, entry, exitCorner, rejoin, accessDir, laneDir, exitDir, forward } = PIT_LANE;
+  return {
+    stall,
+    enterPath: [
+      { pos: merge.clone(), yaw: yawFromDir(accessDir), turn: false },
+      { pos: entry.clone(), yaw: yawFromDir(accessDir), turn: true, faceYaw: yawFromDir(laneDir) },
+      { pos: stall.clone(), yaw: yawFromDir(laneDir), turn: false },
+    ],
+    exitPath: [
+      { pos: stall.clone(), yaw: yawFromDir(laneDir), turn: false },
+      { pos: exitCorner.clone(), yaw: yawFromDir(laneDir), turn: true, faceYaw: yawFromDir(exitDir) },
+      { pos: rejoin.clone(), yaw: yawFromDir(exitDir), turn: true, faceYaw: yawFromDir(forward) },
+    ],
+  };
+}
 
 function pointInOrientedBand(pos, a, b, halfWidth) {
   const seg = b.subtract(a);
@@ -401601,9 +401654,6 @@ const ui = {
   lapGlobal: document.getElementById('lap-global'),
   statusPill: document.getElementById('status-pill'),
   pitPill: document.getElementById('pit-pill'),
-  pitMenu: document.getElementById('pit-menu'),
-  pitProgress: document.getElementById('pit-progress'),
-  pitStatus: document.getElementById('pit-status'),
   finishTime: document.getElementById('finish-time'),
   finishBest: document.getElementById('finish-best'),
   finishTitle: document.getElementById('finish-title'),
@@ -402004,20 +402054,31 @@ async function run_game() {
     if (tireEl) tireEl.style.background = `linear-gradient(90deg, ${compound.css}, #7dffd8)`;
   }
 
-  function hidePitMenu() {
-    ui.pitMenu?.classList.remove('visible', 'changing', 'waiting');
-    if (ui.pitProgress) ui.pitProgress.style.width = '0%';
+  function pitMenuEl(playerId) {
+    return document.getElementById('pit-menu-p' + playerId);
+  }
+
+  function hidePitMenu(playerId) {
+    if (playerId == null) {
+      hidePitMenu(1);
+      hidePitMenu(2);
+      document.body.classList.remove('dual-pit');
+      return;
+    }
+    const el = pitMenuEl(playerId);
+    el?.classList.remove('visible', 'changing', 'waiting');
+    const progress = el?.querySelector('.pit-progress');
+    if (progress) progress.style.width = '0%';
   }
 
   function showPitMenu(player, mode = 'servicing') {
-    if (!ui.pitMenu) return;
-    ui.pitMenu.classList.add('visible');
-    ui.pitMenu.classList.toggle('changing', mode === 'waiting');
-    ui.pitMenu.classList.toggle('waiting', mode === 'waiting');
-    ui.pitMenu.dataset.player = String(player.id);
+    const el = pitMenuEl(player.id);
+    if (!el) return;
+    el.classList.add('visible');
+    el.classList.toggle('changing', mode === 'waiting');
+    el.classList.toggle('waiting', mode === 'waiting');
 
-    // Highlight key hints on buttons
-    ui.pitMenu.querySelectorAll('.pit-choice').forEach((btn) => {
+    el.querySelectorAll('.pit-choice').forEach((btn) => {
       const keyHint = btn.querySelector('.key-hint');
       if (!keyHint) return;
       if (player.id === 1) {
@@ -402025,20 +402086,23 @@ async function run_game() {
       } else {
         keyHint.textContent = { soft: 'Touche 8', medium: 'Touche 9', hard: 'Touche 0' }[btn.dataset.compound] || '';
       }
+      btn.classList.toggle('selected', !!player.pitTargetCompound && btn.dataset.compound === player.pitTargetCompound);
     });
 
+    const status = el.querySelector('.pit-status');
+    const progress = el.querySelector('.pit-progress');
     if (mode === 'waiting' && player.pitTargetCompound) {
       const c = (0,_scripts_tires_js__WEBPACK_IMPORTED_MODULE_5__.getCompound)(player.pitTargetCompound);
       const pct = Math.min(100, (player.pitProgress / _scripts_track_js__WEBPACK_IMPORTED_MODULE_4__.PIT_LANE.serviceTimeMs) * 100);
-      if (ui.pitProgress) ui.pitProgress.style.width = pct + '%';
-      if (ui.pitStatus) {
-        ui.pitStatus.textContent = `P${player.id} · montage ${c.label}… ${Math.ceil((_scripts_track_js__WEBPACK_IMPORTED_MODULE_4__.PIT_LANE.serviceTimeMs - player.pitProgress) / 1000)}s`;
+      if (progress) progress.style.width = pct + '%';
+      if (status) {
+        status.textContent = `Montage ${c.label}… ${Math.ceil((_scripts_track_js__WEBPACK_IMPORTED_MODULE_4__.PIT_LANE.serviceTimeMs - player.pitProgress) / 1000)}s`;
       }
-    } else if (ui.pitStatus) {
-      ui.pitStatus.textContent = mode === 'entering'
+    } else if (status) {
+      status.textContent = mode === 'entering'
         ? (player.id === 1
-          ? 'En approche box — choisis déjà : 1 Soft · 2 Medium · 3 Hard'
-          : 'En approche box — choisis déjà : 8 Soft · 9 Medium · 0 Hard')
+          ? 'Approche box — 1 Soft · 2 Medium · 3 Hard'
+          : 'Approche box — 8 Soft · 9 Medium · 0 Hard')
         : (player.id === 1
           ? 'À l’arrêt — valide avec 1 / 2 / 3'
           : 'À l’arrêt — valide avec 8 / 9 / 0');
@@ -402068,7 +402132,7 @@ async function run_game() {
     player.pitTurnDone = false;
     (0,_scripts_tires_js__WEBPACK_IMPORTED_MODULE_5__.applyWheelCompoundColor)(player.wheels, compound);
     updateCompoundHud(player);
-    hidePitMenu();
+    hidePitMenu(player.id);
     flashScreen();
   }
 
@@ -402168,11 +402232,13 @@ async function run_game() {
     if (!player || !compoundId) return;
     if (player.pitState === 'entering') {
       player.pitTargetCompound = compoundId;
-      ui.pitMenu?.querySelectorAll('.pit-choice').forEach((b) => {
+      const el = pitMenuEl(player.id);
+      el?.querySelectorAll('.pit-choice').forEach((b) => {
         b.classList.toggle('selected', b.dataset.compound === compoundId);
       });
-      if (ui.pitStatus) {
-        ui.pitStatus.textContent = `P${player.id} · ${(0,_scripts_tires_js__WEBPACK_IMPORTED_MODULE_5__.getCompound)(compoundId).label} sélectionné — montage à la box`;
+      const status = el?.querySelector('.pit-status');
+      if (status) {
+        status.textContent = `${(0,_scripts_tires_js__WEBPACK_IMPORTED_MODULE_5__.getCompound)(compoundId).label} sélectionné — montage à la box`;
       }
       return;
     }
@@ -402181,13 +402247,14 @@ async function run_game() {
     }
   }
 
-  // Pit menu click choices
-  ui.pitMenu?.querySelectorAll('.pit-choice').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      if (!sceneBundle || stateGame !== 'racing') return;
-      const pid = Number(ui.pitMenu.dataset.player || 1);
-      const player = sceneBundle.players.find((p) => p.id === pid);
-      selectPitCompound(player, btn.dataset.compound);
+  // Pit menu click choices (one panel per player)
+  [1, 2].forEach((pid) => {
+    pitMenuEl(pid)?.querySelectorAll('.pit-choice').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (!sceneBundle || stateGame !== 'racing') return;
+        const player = sceneBundle.players.find((p) => p.id === pid);
+        selectPitCompound(player, btn.dataset.compound);
+      });
     });
   });
 
@@ -402303,7 +402370,7 @@ async function run_game() {
     }
 
     let anyoneOffroad = false;
-    let pitMenuPlayer = null;
+    const activePitMenus = new Set();
     let maxLapShown = 1;
 
     // Slipstream before movement so boost applies this frame
@@ -402372,9 +402439,12 @@ async function run_game() {
 
         let locked = false;
 
+        const pitPaths = (0,_scripts_track_js__WEBPACK_IMPORTED_MODULE_4__.getPitPathsForPlayer)(player.id, settings.players);
+        const pitStall = pitPaths.stall;
+
         if (player.pitState === 'entering') {
           locked = true;
-          pitMenuPlayer = player;
+          activePitMenus.add(player.id);
           showPitMenu(player, 'entering');
           const earlyChoice = readPitCompoundChoice(player);
           if (earlyChoice) selectPitCompound(player, earlyChoice);
@@ -402383,7 +402453,7 @@ async function run_game() {
           try {
             move = (0,_scripts_car_js__WEBPACK_IMPORTED_MODULE_2__.followPitPath)(
               player.car,
-              _scripts_track_js__WEBPACK_IMPORTED_MODULE_4__.PIT_LANE.enterPath,
+              pitPaths.enterPath,
               {
                 pathIndex: player.pitPathIndex,
                 turning: player.pitTurning,
@@ -402404,8 +402474,8 @@ async function run_game() {
           player.velocity = move.velocity;
 
           if (move.done) {
-            player.car.position.x = _scripts_track_js__WEBPACK_IMPORTED_MODULE_4__.PIT_LANE.box.x;
-            player.car.position.z = _scripts_track_js__WEBPACK_IMPORTED_MODULE_4__.PIT_LANE.box.z;
+            player.car.position.x = pitStall.x;
+            player.car.position.z = pitStall.z;
             player.velocity = 0;
             player.pitTurning = false;
             player.pitTurnDone = false;
@@ -402418,15 +402488,19 @@ async function run_game() {
         } else if (player.pitState === 'servicing') {
           locked = true;
           player.velocity = 0;
-          pitMenuPlayer = player;
+          player.car.position.x = pitStall.x;
+          player.car.position.z = pitStall.z;
+          activePitMenus.add(player.id);
           showPitMenu(player, 'servicing');
           const choice = readPitCompoundChoice(player);
           if (choice) startTireWait(player, choice);
         } else if (player.pitState === 'waiting') {
           locked = true;
           player.velocity = 0;
+          player.car.position.x = pitStall.x;
+          player.car.position.z = pitStall.z;
           player.pitProgress += frameDuration;
-          pitMenuPlayer = player;
+          activePitMenus.add(player.id);
           showPitMenu(player, 'waiting');
           if (player.pitProgress >= _scripts_track_js__WEBPACK_IMPORTED_MODULE_4__.PIT_LANE.serviceTimeMs) {
             finishPitService(player);
@@ -402437,7 +402511,7 @@ async function run_game() {
           try {
             move = (0,_scripts_car_js__WEBPACK_IMPORTED_MODULE_2__.followPitPath)(
               player.car,
-              _scripts_track_js__WEBPACK_IMPORTED_MODULE_4__.PIT_LANE.exitPath,
+              pitPaths.exitPath,
               {
                 pathIndex: player.pitPathIndex,
                 turning: player.pitTurning,
@@ -402467,11 +402541,6 @@ async function run_game() {
             player.pitTurning = false;
             player.pitTurnDone = false;
           }
-        }
-
-        // Corridor only on the long straight (path already stays on centerline)
-        if (player.pitState === 'servicing' || player.pitState === 'waiting') {
-          (0,_scripts_track_js__WEBPACK_IMPORTED_MODULE_4__.constrainToPitCorridor)(player.car);
         }
 
         if (!locked) {
@@ -402541,7 +402610,10 @@ async function run_game() {
     }
     (0,_scripts_track_js__WEBPACK_IMPORTED_MODULE_4__.separatePitCars)(players);
 
-    if (!pitMenuPlayer) hidePitMenu();
+    [1, 2].forEach((id) => {
+      if (!activePitMenus.has(id)) hidePitMenu(id);
+    });
+    document.body.classList.toggle('dual-pit', activePitMenus.has(1) && activePitMenus.has(2));
 
     const pitLabels = {
       entering: 'Procédure stands…',
@@ -402550,9 +402622,12 @@ async function run_game() {
       exiting: 'Sortie de box…',
     };
     const anyPit = players.find((p) => p.pitState !== 'none');
-    ui.statusPill.classList.toggle('visible', anyoneOffroad && stateGame === 'racing');
-    ui.pitPill.classList.toggle('visible', !!anyPit && stateGame === 'racing');
-    ui.pitPill.textContent = anyPit ? (pitLabels[anyPit.pitState] || 'Stands') : '';
+    const pitCount = players.filter((p) => p.pitState !== 'none').length;
+    ui.statusPill.classList.toggle('visible', anyoneOffroad && stateGame === 'racing' && settings.players === 1);
+    ui.pitPill.classList.toggle('visible', !!anyPit && stateGame === 'racing' && settings.players === 1);
+    ui.pitPill.textContent = anyPit
+      ? (pitCount > 1 ? 'Double arrêt aux stands' : (pitLabels[anyPit.pitState] || 'Stands'))
+      : '';
     ui.timer.textContent = stopwatch.getTimeString();
     ui.lapGlobal.textContent = `Tour ${Math.min(maxLapShown, settings.laps)} / ${settings.laps}`;
 
@@ -402586,7 +402661,9 @@ async function run_game() {
     scene.render();
   });
 
-  window.addEventListener('resize', () => engine.resize());
+  const onViewportResize = () => engine.resize();
+  window.addEventListener('resize', onViewportResize);
+  window.visualViewport?.addEventListener('resize', onViewportResize);
 }
 
 run_game().catch((err) => {
